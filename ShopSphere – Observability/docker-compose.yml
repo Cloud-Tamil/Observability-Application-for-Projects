@@ -1,0 +1,272 @@
+services:
+
+  # =========================================================
+  # API GATEWAY
+  # =========================================================
+
+  gateway:
+
+    build:
+      context: ./gateway
+
+    container_name: shopsphere-gateway
+
+    ports:
+      - "8080:8080"
+
+    depends_on:
+
+      product-service:
+        condition: service_healthy
+
+      order-service:
+        condition: service_healthy
+
+      user-service:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+    networks:
+      - shopsphere
+
+
+  # =========================================================
+  # PRODUCT SERVICE
+  # =========================================================
+
+  product-service:
+
+    build:
+      context: ./services/product-service
+
+    container_name: shopsphere-product
+
+    environment:
+      PORT: "3001"
+
+    expose:
+      - "3001"
+
+    healthcheck:
+
+      test:
+        [
+          "CMD",
+          "wget",
+          "--spider",
+          "-q",
+          "http://localhost:3001/health"
+        ]
+
+      interval: 10s
+
+      timeout: 3s
+
+      retries: 5
+
+      start_period: 10s
+
+    restart: unless-stopped
+
+    networks:
+      - shopsphere
+
+
+  # =========================================================
+  # ORDER SERVICE
+  # =========================================================
+
+  order-service:
+
+    build:
+      context: ./services/order-service
+
+    container_name: shopsphere-order
+
+    environment:
+
+      PORT: "3002"
+
+      PRODUCT_SERVICE_URL: "http://product-service:3001"
+
+    expose:
+      - "3002"
+
+    depends_on:
+
+      product-service:
+        condition: service_healthy
+
+    healthcheck:
+
+      test:
+        [
+          "CMD",
+          "wget",
+          "--spider",
+          "-q",
+          "http://localhost:3002/health"
+        ]
+
+      interval: 10s
+
+      timeout: 3s
+
+      retries: 5
+
+      start_period: 10s
+
+    restart: unless-stopped
+
+    networks:
+      - shopsphere
+
+
+  # =========================================================
+  # USER SERVICE
+  # =========================================================
+
+  user-service:
+
+    build:
+      context: ./services/user-service
+
+    container_name: shopsphere-user
+
+    environment:
+
+      PORT: "3003"
+
+    expose:
+      - "3003"
+
+    healthcheck:
+
+      test:
+        [
+          "CMD",
+          "wget",
+          "--spider",
+          "-q",
+          "http://localhost:3003/health"
+        ]
+
+      interval: 10s
+
+      timeout: 3s
+
+      retries: 5
+
+      start_period: 10s
+
+    restart: unless-stopped
+
+    networks:
+      - shopsphere
+
+
+  # =========================================================
+  # PROMETHEUS
+  # =========================================================
+
+  prometheus:
+
+    image: prom/prometheus:v3.5.0
+
+    container_name: shopsphere-prometheus
+
+    command:
+
+      - "--config.file=/etc/prometheus/prometheus.yml"
+
+      - "--storage.tsdb.path=/prometheus"
+
+      - "--storage.tsdb.retention.time=7d"
+
+    ports:
+      - "9090:9090"
+
+    volumes:
+
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+      - prometheus_data:/prometheus
+
+    depends_on:
+
+      product-service:
+        condition: service_healthy
+
+      order-service:
+        condition: service_healthy
+
+      user-service:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+    networks:
+      - shopsphere
+
+
+  # =========================================================
+  # GRAFANA
+  # =========================================================
+
+  grafana:
+
+    image: grafana/grafana:12.1.1
+
+    container_name: shopsphere-grafana
+
+    ports:
+      - "3000:3000"
+
+    environment:
+
+      GF_SECURITY_ADMIN_USER: admin
+
+      GF_SECURITY_ADMIN_PASSWORD: admin
+
+      GF_USERS_ALLOW_SIGN_UP: "false"
+
+    volumes:
+
+      - grafana_data:/var/lib/grafana
+
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+    depends_on:
+
+      prometheus:
+        condition: service_started
+
+    restart: unless-stopped
+
+    networks:
+      - shopsphere
+
+
+# ===========================================================
+# NETWORK
+# ===========================================================
+
+networks:
+
+  shopsphere:
+
+    driver: bridge
+
+
+# ===========================================================
+# PERSISTENT VOLUMES
+# ===========================================================
+
+volumes:
+
+  prometheus_data:
+
+  grafana_data:
