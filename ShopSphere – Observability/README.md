@@ -1176,3 +1176,7 @@ The final architecture should eventually become:
 ```
 
 This local project is therefore the **foundation** for the larger ShopSphere DevOps project.
+
+## Author
+
+**Tamilselvan** — DevOps & Cloud Engineering Learning Project
