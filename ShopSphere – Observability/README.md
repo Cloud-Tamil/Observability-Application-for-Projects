@@ -1,4 +1,4 @@
-# ShopSphere — Production-Microservices + Observability
+# ShopSphere - Production-Microservices + Observability
 
 ShopSphere is a production-style local microservices application designed for learning and practicing:
 
