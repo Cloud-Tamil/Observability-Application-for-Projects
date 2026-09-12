@@ -47,6 +47,8 @@ aws --version
 argocd version --client
 jq --version
 curl --version
+
+cp .env.example .env
 ```
 
 ---
