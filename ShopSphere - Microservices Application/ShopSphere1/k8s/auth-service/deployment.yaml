@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: shopsphere
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: auth-service }
+  template:
+    metadata:
+      labels: { app: auth-service }
+    spec:
+      containers:
+        - name: auth-service
+          image: shopsphere/auth-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4001
+          env:
+            - { name: PORT, value: "4001" }
+            - { name: MONGO_URI, value: "mongodb://mongo:27017/authdb" }
+            - { name: JWT_SECRET, value: "supersecretjwtkey" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: shopsphere
+spec:
+  selector: { app: auth-service }
+  ports:
+    - { port: 4001, targetPort: 4001 }
