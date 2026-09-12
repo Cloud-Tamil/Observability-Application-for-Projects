@@ -1,0 +1,40 @@
+groups:
+  - name: fusion-availability
+    rules:
+      - alert: FusionServiceDown
+        expr: up{job="fusion-metrics"} == 0
+        for: 1m
+        labels: { severity: critical, team: platform }
+        annotations:
+          summary: "Fusion Metrics is down"
+          description: "{{ $labels.instance }} unreachable for >1m."
+      - alert: FusionHighErrorRate
+        expr: job:fusion_error_rate:5m > 0.05
+        for: 2m
+        labels: { severity: warning, team: platform }
+        annotations:
+          summary: "5xx error rate above 5%"
+          description: "Current error ratio: {{ $value | humanizePercentage }}."
+      - alert: FusionHighLatencyP95
+        expr: job:fusion_latency_p95:5m > 1
+        for: 3m
+        labels: { severity: warning, team: platform }
+        annotations:
+          summary: "p95 latency above 1s"
+          description: "p95 is {{ $value | humanizeDuration }}."
+  - name: fusion-slo
+    rules:
+      - alert: FusionSLOFastBurn
+        expr: job:fusion_slo_burn_rate:5m > 14.4
+        for: 2m
+        labels: { severity: critical, team: platform, slo: availability }
+        annotations:
+          summary: "SLO fast burn detected"
+          description: "Burn rate {{ $value | printf \"%.2f\" }}x over 5m window."
+      - alert: FusionSLOSlowBurn
+        expr: job:fusion_slo_burn_rate:1h > 6
+        for: 15m
+        labels: { severity: warning, team: platform, slo: availability }
+        annotations:
+          summary: "SLO slow burn detected"
+          description: "Burn rate {{ $value | printf \"%.2f\" }}x over 1h window."

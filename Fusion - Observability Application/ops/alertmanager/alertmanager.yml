@@ -1,0 +1,31 @@
+global:
+  resolve_timeout: 5m
+route:
+  receiver: default
+  group_by: ["alertname", "severity", "service"]
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 3h
+  routes:
+    - matchers: [severity="critical"]
+      receiver: critical
+      continue: true
+    - matchers: [severity="warning"]
+      receiver: warning
+receivers:
+  - name: default
+    webhook_configs:
+      - url: http://127.0.0.1:9999/noop
+        send_resolved: true
+  - name: warning
+    webhook_configs:
+      - url: http://127.0.0.1:9999/warning
+        send_resolved: true
+  - name: critical
+    webhook_configs:
+      - url: http://127.0.0.1:9999/critical
+        send_resolved: true
+inhibit_rules:
+  - source_matchers: [severity="critical"]
+    target_matchers: [severity="warning"]
+    equal: ["alertname", "service"]

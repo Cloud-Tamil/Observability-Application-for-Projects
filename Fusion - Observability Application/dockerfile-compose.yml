@@ -1,0 +1,150 @@
+name: fusion-metrics
+
+x-app-env: &app-env
+  FUSION_ENVIRONMENT: local
+  FUSION_LOG_LEVEL: INFO
+  FUSION_VERSION: "2.0.0"
+  FUSION_JWT_SECRET: ${FUSION_JWT_SECRET:-please-change-me}
+  FUSION_BOOTSTRAP_ADMIN_USER: ${FUSION_BOOTSTRAP_ADMIN_USER:-admin}
+  FUSION_BOOTSTRAP_ADMIN_PASSWORD: ${FUSION_BOOTSTRAP_ADMIN_PASSWORD:-admin123}
+  FUSION_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-fusion}:${POSTGRES_PASSWORD:-fusion}@postgres:5432/${POSTGRES_DB:-fusion}
+  FUSION_REDIS_URL: redis://redis:6379/0
+  FUSION_OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: fusion-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fusion}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fusion}
+      POSTGRES_DB: ${POSTGRES_DB:-fusion}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fusion} -d ${POSTGRES_DB:-fusion}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [observability]
+
+  redis:
+    image: redis:7-alpine
+    container_name: fusion-redis
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [observability]
+
+  app:
+    build: { context: ., dockerfile: Dockerfile }
+    image: fusion-metrics:local
+    container_name: fusion-app
+    environment: *app-env
+    expose: ["8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+      tempo:    { condition: service_started }
+    restart: unless-stopped
+    networks: [observability]
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: fusion-nginx
+    volumes:
+      - ./ops/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports: ["8000:80"]
+    depends_on: [app]
+    networks: [observability]
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: fusion-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+      - --web.enable-admin-api
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./ops/prometheus/recording_rules.yml:/etc/prometheus/recording_rules.yml:ro
+      - ./ops/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    ports: ["9090:9090"]
+    networks: [observability]
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: fusion-alertmanager
+    volumes:
+      - ./ops/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports: ["9093:9093"]
+    networks: [observability]
+
+  loki:
+    image: grafana/loki:3.2.1
+    container_name: fusion-loki
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./ops/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    ports: ["3100:3100"]
+    networks: [observability]
+
+  promtail:
+    image: grafana/promtail:3.2.1
+    container_name: fusion-promtail
+    command: ["-config.file=/etc/promtail/promtail.yml"]
+    volumes:
+      - ./ops/promtail/promtail.yml:/etc/promtail/promtail.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on: [loki]
+    networks: [observability]
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: fusion-tempo
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    volumes:
+      - ./ops/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo-data:/var/tempo
+    ports: ["3200:3200", "4318:4318"]
+    networks: [observability]
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    container_name: fusion-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/slo-overview.json
+      GF_FEATURE_TOGGLES_ENABLE: traceqlEditor
+      GF_LOG_LEVEL: warn
+    volumes:
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./ops/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports: ["3001:3000"]
+    depends_on: [prometheus, loki, tempo]
+    networks: [observability]
+
+networks:
+  observability:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  prometheus-data:
+  loki-data:
+  tempo-data:
+  grafana-data:
