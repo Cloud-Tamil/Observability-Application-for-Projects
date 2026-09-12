@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: shopsphere
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: user-service }
+  template:
+    metadata:
+      labels: { app: user-service }
+    spec:
+      containers:
+        - name: user-service
+          image: shopsphere/user-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4002
+          env:
+            - { name: PORT, value: "4002" }
+            - { name: MONGO_URI, value: "mongodb://mongo:27017/userdb" }
+            - { name: JWT_SECRET, value: "supersecretjwtkey" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: shopsphere
+spec:
+  selector: { app: user-service }
+  ports:
+    - { port: 4002, targetPort: 4002 }

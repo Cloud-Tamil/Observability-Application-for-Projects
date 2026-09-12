@@ -1,0 +1,16 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "panels": [
+    {
+      "title": "Service Up Status",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [{ "expr": "up", "legendFormat": "{{job}}" }]
+    }
+  ],
+  "schemaVersion": 39,
+  "title": "ShopSphere Overview",
+  "uid": "shopsphere-overview",
+  "version": 1
+}
